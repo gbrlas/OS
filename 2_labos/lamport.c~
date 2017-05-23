@@ -1,0 +1,175 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <malloc.h>
+#include <time.h>
+#include <string.h>
+
+int Nd;
+int Ns;
+int *TRAZIM;
+int *BROJ;
+char *ispis;
+
+int odaberi_slobodan_stol (char *polje);
+int provjeri_stol (int x, char *polje);
+int ima_slobodnih(char *polje);
+void udji_u_KO (int i);
+void izadji_iz_KO (int i);
+
+//pomocne funkcije
+int provjeri_stol (int x, char *polje) {
+	if (polje[x] == '-')
+		return 1;
+	else return 0;
+}
+
+int odaberi_slobodan_stol (char *polje) {
+    int *temp = (int *)malloc(sizeof(int)*Ns);
+    int i, j=0, n=0;
+	
+	usleep(10);
+    srand(time(NULL));
+	
+	//nađi sve slobodne stolove i stavi ih u novo polje
+    for (i=0; i<Ns; i++) {
+        if (polje[i] == '-') {
+            n++;
+            temp[j] = i;
+            j++;
+    	}
+    }
+
+    temp = realloc(temp, sizeof(int)*n);
+	
+	//vrati random jedan od slobodnih stolova
+    return temp[rand()%n];
+}
+
+int ima_slobodnih(char *polje) {
+    int i;
+    int slobodni = 0;
+
+    //pogledaj ima li slobodnih
+    for (i=0; i<Ns; i++) {
+        if (ispis[i] == '-') {
+            slobodni = 1;
+            break;
+        }
+    }
+
+    if (slobodni)
+        return 1;
+    else return 0;
+}
+//kraj pomoćnih funkcija
+
+
+//Lamportov algoritam
+void udji_u_KO (int i) {
+    int max, j, x;
+    max = 0;
+
+    TRAZIM[i] = 1;
+    for (x=0; x<Nd; x++) {
+        if (BROJ[x] > max)
+            max = BROJ[x];
+    }
+
+    BROJ[i] = max+1;
+    TRAZIM[i] = 0;
+
+    for (j=0;j<Nd;j++){
+    	while (TRAZIM[j]!=0);
+
+        while (BROJ[j]!=0 && (BROJ[j]<BROJ[i] || (BROJ[j]==BROJ[i] && j<i)));
+    }
+}
+
+void izadji_iz_KO (int i) {
+    BROJ[i] = 0;
+}
+//kraj Lamportovog algoritma
+
+void *posao_dretve (void *thread_id) {
+    int j, id, x;
+
+    id = *(int *)thread_id;
+
+    //obavljaj ovaj posao sve dok ima slobodnih stolova
+    while (ima_slobodnih(ispis)) {
+        //odaberi jedan random slobodan stol
+        x = odaberi_slobodan_stol(ispis);
+        printf("Dretva %d: odabirem stol %d\n", id+1, x+1);
+        
+        usleep(10);
+        udji_u_KO(id);
+
+        //provjeri je li stol i dalje slobodan
+        if (provjeri_stol(x, ispis)) {
+            //ako je stol i dalje slobodan rezerviraj ga
+            ispis[x] = (char)(((int)'0')+id+1);
+            printf("Dretva %d: rezerviram stol %d, stanje: %s\n", id+1, x+1, ispis);
+            //ispisi stanje
+        } else {
+            //ako nije javi da je rezervacija nije uspjela i ispiši stanje
+            printf("Dretva %d: neuspjela rezervacija stola %d, stanje: %s\n", id+1, x+1, ispis);
+        }
+        
+        izadji_iz_KO(id);
+        usleep(10);
+    }
+    return NULL;
+}
+
+int main(int argc, char *argv[]) {
+    int i;
+    int *thread_id; 
+    pthread_t *thread;
+
+    //broj dretvi i stolova
+    Nd = atoi(argv[1]);
+   	Ns = atoi(argv[2]);
+	
+    //alokacija memorije
+    TRAZIM = (int *) malloc(sizeof(int)*Nd);
+    BROJ = (int *) malloc(sizeof(int)*Nd);
+    thread_id = (int *) malloc(sizeof(int)*Nd);
+    thread = (pthread_t *) malloc(sizeof(pthread_t)*Nd);
+    ispis = (char *) malloc(sizeof(char)*Ns);
+
+    for (i=0; i<Ns; i++) {
+        ispis[i] = '-';
+    }
+    
+    for (i=0; i<Nd; i++) {
+    	TRAZIM[i] = 0;
+    	BROJ[i] = 0;
+    	thread_id[i] = 0;
+    }
+    
+    printf("Dretvi: %d   Stolova: %d\n", Nd, Ns);
+
+    //stvaranje dretvi
+    for (i=0; i<Nd; i++) {
+        thread_id[i] = i;
+        if (pthread_create(&thread[i], NULL, posao_dretve,((void *)&thread_id[i]))){
+            printf("Ne može se stvoriti nova dretva\n");
+            exit(1);
+        }
+    }
+
+    //skupljanje izlaznih vrijednosti svih stvorenih dretvi
+    for (i=0; i<Nd; i++)
+        pthread_join(thread[i], NULL);
+
+    //oslobađanje alocirane memorije
+    free(TRAZIM);
+    free(BROJ);
+    free(thread_id);
+    free(thread);
+    free(ispis);
+
+    return 0;
+}
+

@@ -1,0 +1,18 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+int main () {
+	int i = 0;
+	int j = 0;
+	
+	if (fork() == 0) {
+		i=2;
+		j=2;
+		printf("proces dijete -> i: %d\nproces dijete -> j: %d\n", i, j);
+		exit(0);
+	}
+	printf("glavni proces -> i: %d\nglavni proces -> j: %d\n", i, j);
+	wait(NULL);
+	printf("glavni proces -> %d %d\n", i, j);
+	return 0;
+}
